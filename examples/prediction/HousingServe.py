@@ -37,6 +37,7 @@ class HousingServe(object):
 
 
 if __name__ == '__main__':
+  fairing.config.set_preprocessor(name='python', input_files=['HousingServe.py', 'requirements.txt', MODEL_FILE])
   fairing.config.run()
   serve = HousingServe()
   print(serve.predict(np.ndarray([1, 37]), None))
