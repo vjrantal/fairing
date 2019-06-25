@@ -12,4 +12,6 @@ GCP_CREDS_SECRET_NAME = 'user-gcp-sa'
 
 AWS_CREDS_SECRET_NAME = 'aws-secret'
 
+AZURE_CREDS_SECRET_NAME = 'azure-credentials'
+
 DEFAULT_USER_AGENT = 'kubeflow-fairing/{VERSION}'
