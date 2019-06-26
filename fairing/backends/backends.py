@@ -161,7 +161,7 @@ class AzureBackend(KubernetesBackend):
 
     def __init__(self, namespace=None, build_context_source=None):
         build_context_source = build_context_source or blob_context.BlobContextSource()
-        super(KubernetesBackend, self).__init__(namespace, build_context_source)
+        super(AzureBackend, self).__init__(namespace, build_context_source)
 
     def get_builder(self, preprocessor, base_image, registry, needs_deps_installation=True, pod_spec_mutators=None):
         pod_spec_mutators = pod_spec_mutators or []
@@ -169,7 +169,7 @@ class AzureBackend(KubernetesBackend):
         if azure.is_acr_registry(registry):
             pod_spec_mutators.append(azure.add_acr_config)
             azure.create_acr_registry(registry, constants.DEFAULT_IMAGE_NAME)
-        return super(KubernetesBackend, self).get_builder(preprocessor,
+        return super(AzureBackend, self).get_builder(preprocessor,
                                                    base_image,
                                                    registry,
                                                    needs_deps_installation,
