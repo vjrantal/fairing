@@ -13,11 +13,9 @@ from kubernetes import client
 
 logger = logging.getLogger(__name__)
 
-
 class AzureUploader(object):
     def __init__(self):
-        #self.storage_client = get_client_from_auth_file(StorageManagementClient)
-        credentials = get_azure_credentials('azure-credentials', 'kubeflow')
+        credentials = get_azure_credentials(constants.AZURE_CREDS_SECRET_NAME, 'kubeflow')
         sp_credentials = ServicePrincipalCredentials(
             client_id = credentials['clientId'],
             secret = credentials['clientSecret'],
@@ -27,26 +25,48 @@ class AzureUploader(object):
 
     def upload_to_container(self,
                             region,
+                            resource_group_name,
                             storage_account_name,
                             container_name,
                             blob_name,
                             file_to_upload):
-        block_blob_service = self.get_or_create_container(region, storage_account_name, container_name)
+        block_blob_service = self.get_or_create_container(region, resource_group_name, storage_account_name, container_name)
         block_blob_service.create_blob_from_path(container_name, blob_name, file_to_upload)
         # TODO ME what do we return here?
         return f"https://{storage_account_name}.blob.core.windows.net/{container_name}/{blob_name}"
 
-    def get_or_create_container(self, region, storage_account_name, container_name):
-        # TODO ME
-        # if storage account doesn't exist
-        # create storage account in region
-        # if container doesn't exist
-        # create container
-        # get key using storage_client
-        # instantiate BlockBlobService with storage_account_name and key
-        # return BlockBlobService
-        pass
+    def get_or_create_container(self, region, resource_group_name, storage_account_name, container_name):
+        self.create_storage_account_if_not_exists(region, resource_group_name, storage_account_name)
 
+        storage_keys = storage_client.storage_accounts.list_keys(resource_group_name, storage_account_name)
+        storage_keys = {v.key_name: v.value for v in storage_keys.keys}
+        block_blob_service = BlockBlobService(account_name=storage_account_name, account_key=storage_keys['key1'])
+        containers = block_blob_service.list_containers()
+        container = next(filter(lambda container: container.name == container_name, containers), None)
+        
+        if (container is None):
+            result = block_blob_service.create_container(container_name)
+
+        return block_blob_service
+    
+    def create_storage_account_if_not_exists(self, region, resource_group_name, storage_account_name):
+        # Creation should succeed even if the storage account exists, but if it exists I get error "The property 'isHnsEnabled' was specified in the input, but it cannot be updated."
+        storage_accounts = self.storage_client.storage_accounts.list_by_resource_group(resource_group_name)
+        storage_account = next(filter(lambda storage_account: storage_account.name == storage_account_name, storage_accounts), None)
+        
+        if (storage_account is None):    
+            storage_async_operation = storage_client.storage_accounts.create(
+                resource_group_name,
+                storage_account_name,
+                StorageAccountCreateParameters(
+                    sku=Sku(name=SkuName.standard_ragrs),
+                    kind=Kind.storage,
+                    location=region
+                )
+            )
+            storage_account = storage_async_operation.result()
+            
+        return storage_account
 
 # TODO ME review: what's a project id in Azure context? \
 def guess_project_name(credentials_file=None):
@@ -147,7 +167,7 @@ def get_azure_credentials(secret_name, namespace):
 def create_acr_registry(registry, repository):    
     # Authenticate with the Azure Management Libraries for Python
     # https://docs.microsoft.com/en-us/python/azure/python-sdk-azure-authenticate?view=azure-python
-    credentials = get_azure_credentials('azure-credentials', 'kubeflow')
+    credentials = get_azure_credentials(constants.AZURE_CREDS_SECRET_NAME, 'kubeflow')
     sp_credentials = ServicePrincipalCredentials(
         client_id = credentials['clientId'],
         secret = credentials['clientSecret'],

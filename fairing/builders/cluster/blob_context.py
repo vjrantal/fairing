@@ -9,8 +9,10 @@ from fairing.kubernetes.manager import KubeManager, client
 
 
 class BlobContextSource(ContextSourceInterface):
-    def __init__(self, region=None, storage_account_name=None, container_name=None, namespace='default'):
-        self.region = region or "east-us"
+    def __init__(self, region=None, resource_group_name=None, storage_account_name=None, container_name=None, namespace='default'):
+        # TODO ME review the default values
+        self.region = region or "WestEurope"
+        self.resource_group_name = resource_group_name or "fairing"
         # TODO ME note that the generated name is not necessarily unique due to truncation...
         self.storage_account_name = storage_account_name or f"{uuid.uuid4().hex[:24]}"
         self.container_name = container_name or "fairing-demo"
@@ -26,6 +28,7 @@ class BlobContextSource(ContextSourceInterface):
         # TODO ME find out what's happening with the return value
         return azure_uploader.upload_to_container(
                     self.region,
+                    self.resource_group_name,
                     self.storage_account_name,
                     self.container_name,
                     blob_name='fairing_builds/' + context_hash,
