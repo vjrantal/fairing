@@ -3,10 +3,14 @@ import logging
 import os
 import base64
 
-from azure.common.client_factory import get_client_from_auth_file
 from azure.common.credentials import ServicePrincipalCredentials
 from azure.mgmt.containerregistry import ContainerRegistryManagementClient
 from azure.mgmt.storage import StorageManagementClient
+from azure.mgmt.storage.models import StorageAccountCreateParameters
+from azure.mgmt.storage.models import Sku
+from azure.mgmt.storage.models import SkuName
+from azure.mgmt.storage.models import Kind
+from azure.storage.blob import BlockBlobService
 from fairing.constants import constants
 from fairing.kubernetes.manager import KubeManager
 from kubernetes import client
@@ -38,7 +42,7 @@ class AzureUploader(object):
     def get_or_create_container(self, region, resource_group_name, storage_account_name, container_name):
         self.create_storage_account_if_not_exists(region, resource_group_name, storage_account_name)
 
-        storage_keys = storage_client.storage_accounts.list_keys(resource_group_name, storage_account_name)
+        storage_keys = self.storage_client.storage_accounts.list_keys(resource_group_name, storage_account_name)
         storage_keys = {v.key_name: v.value for v in storage_keys.keys}
         block_blob_service = BlockBlobService(account_name=storage_account_name, account_key=storage_keys['key1'])
         containers = block_blob_service.list_containers()
@@ -55,7 +59,7 @@ class AzureUploader(object):
         storage_account = next(filter(lambda storage_account: storage_account.name == storage_account_name, storage_accounts), None)
         
         if (storage_account is None):    
-            storage_async_operation = storage_client.storage_accounts.create(
+            storage_async_operation = self.storage_client.storage_accounts.create(
                 resource_group_name,
                 storage_account_name,
                 StorageAccountCreateParameters(

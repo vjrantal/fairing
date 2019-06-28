@@ -5,19 +5,16 @@ from fairing import utils
 from fairing.builders.cluster.context_source import ContextSourceInterface
 from fairing.cloud import azure
 from fairing.constants import constants
-from fairing.kubernetes.manager import KubeManager, client
+from fairing.kubernetes.manager import client
 
 
 class BlobContextSource(ContextSourceInterface):
-    def __init__(self, region=None, resource_group_name=None, storage_account_name=None, container_name=None, namespace='default'):
-        # TODO ME review the default values
+    def __init__(self, region=None, resource_group_name=None, storage_account_name=None, container_name=None):
         self.region = region or "WestEurope"
         self.resource_group_name = resource_group_name or "fairing"
         # TODO ME note that the generated name is not necessarily unique due to truncation...
         self.storage_account_name = storage_account_name or f"{uuid.uuid4().hex[:24]}"
-        self.container_name = container_name or "fairing-demo"
-        self.manager = KubeManager()
-        self.namespace = namespace
+        self.container_name = container_name or "fairing"
 
     def prepare(self, context_filename):
         self.uploaded_context_url = self.upload_context(context_filename)
