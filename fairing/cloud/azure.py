@@ -1,11 +1,14 @@
 import json
 import logging
 import os
+import base64
 
 from azure.common.client_factory import get_client_from_auth_file
+from azure.common.credentials import ServicePrincipalCredentials
 from azure.mgmt.containerregistry import ContainerRegistryManagementClient
 from azure.mgmt.storage import StorageManagementClient
 from fairing.constants import constants
+from fairing.kubernetes.manager import KubeManager
 from kubernetes import client
 
 logger = logging.getLogger(__name__)
@@ -13,7 +16,14 @@ logger = logging.getLogger(__name__)
 
 class AzureUploader(object):
     def __init__(self):
-        self.storage_client = get_client_from_auth_file(StorageManagementClient)
+        #self.storage_client = get_client_from_auth_file(StorageManagementClient)
+        credentials = get_azure_credentials('azure-credentials', 'kubeflow')
+        sp_credentials = ServicePrincipalCredentials(
+            client_id = credentials['clientId'],
+            secret = credentials['clientSecret'],
+            tenant = credentials['tenantId']
+        ) 
+        self.storage_client = StorageManagementClient(sp_credentials, credentials['subscriptionId'])
 
     def upload_to_container(self,
                             region,
@@ -121,6 +131,27 @@ def add_acr_config(kube_manager, pod_spec, namespace):
 def is_acr_registry(registry):
     return registry.endswith(".azurecr.io")
 
-def create_acr_registry(registry, repository):
-    acr_client = get_client_from_auth_file(ContainerRegistryManagementClient)
+# To generate a credentials file for a service principal:
+#    az ad sp create-for-rbac --scope /subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP_NAME} --sdk-auth > ${FILE_NAME}
+# To set a secret in k8s cluster containing the file:
+#    kubectl create secret generic azure-credentials -n kubeflow --from-file=azure-credentials.json=${FILE_NAME}
+# where you should update the variables ${SUBSCRIPTION_ID}, ${RESOURCE_GROUP_NAME}, and ${FILE_NAME}
+def get_azure_credentials(secret_name, namespace):
+    if KubeManager().secret_exists(secret_name, namespace):
+        v1 = client.CoreV1Api()
+        secret = v1.read_namespaced_secret(secret_name, namespace)
+        secret_base64 = list(secret.data.values())[0]
+        secret_json = base64.b64decode(secret_base64).decode('utf-8')
+        return json.loads(secret_json)
+
+def create_acr_registry(registry, repository):    
+    # Authenticate with the Azure Management Libraries for Python
+    # https://docs.microsoft.com/en-us/python/azure/python-sdk-azure-authenticate?view=azure-python
+    credentials = get_azure_credentials('azure-credentials', 'kubeflow')
+    sp_credentials = ServicePrincipalCredentials(
+        client_id = credentials['clientId'],
+        secret = credentials['clientSecret'],
+        tenant = credentials['tenantId']
+    ) 
+    client = ContainerRegistryManagementClient(sp_credentials, credentials['subscriptionId'])
     # TODO ME create the registry
