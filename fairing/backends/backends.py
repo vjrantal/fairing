@@ -7,7 +7,7 @@ from fairing.builders.docker.docker import DockerBuilder
 from fairing.builders.cluster import gcs_context
 from fairing.builders.cluster.cluster import ClusterBuilder
 from fairing.builders.cluster import s3_context
-from fairing.builders.cluster import blob_context
+from fairing.builders.cluster import azurestorage_context
 from fairing.builders.append.append import AppendBuilder
 from fairing.deployers.gcp.gcp import GCPJob
 from fairing.deployers.gcp.gcpserving import GCPServingDeployer
@@ -160,7 +160,7 @@ class AWSBackend(KubernetesBackend):
 class AzureBackend(KubernetesBackend):
 
     def __init__(self, namespace=None, build_context_source=None):
-        build_context_source = build_context_source or blob_context.BlobContextSource()
+        build_context_source = build_context_source or azurestorage_context.StorageContextSource()
         super(AzureBackend, self).__init__(namespace, build_context_source)
 
     def get_builder(self, preprocessor, base_image, registry, needs_deps_installation=True, pod_spec_mutators=None):
@@ -168,7 +168,8 @@ class AzureBackend(KubernetesBackend):
         pod_spec_mutators.append(azure.add_azure_credentials_if_exists)
         if azure.is_acr_registry(registry):
             pod_spec_mutators.append(azure.add_acr_config)
-            azure.create_acr_registry(registry, constants.DEFAULT_IMAGE_NAME)
+            azure.create_acr_registry(registry, constants.DEFAULT_IMAGE_NAME, self._namespace)
+        pod_spec_mutators.append(azure.add_azure_files)
         return super(AzureBackend, self).get_builder(preprocessor,
                                                    base_image,
                                                    registry,

@@ -78,6 +78,7 @@ class ClusterBuilder(BaseBuilder):
             ),
             spec=pod_spec
         )
+        logging.info(build_pod)
         created_pod = client. \
             CoreV1Api(). \
             create_namespaced_pod(self.namespace, build_pod)
