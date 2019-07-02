@@ -10,7 +10,7 @@ from fairing.kubernetes.manager import client
 
 class StorageContextSource(ContextSourceInterface):
     def __init__(self, region=None, resource_group_name=None, storage_account_name=None, share_name=None):
-        self.region = region or "WestEurope"
+        self.region = region or "NortEurope"
         self.resource_group_name = resource_group_name or "fairing"
         # TODO ME note that the generated name is not necessarily unique due to truncation...
         self.storage_account_name = storage_account_name or f"{uuid.uuid4().hex[:24]}"

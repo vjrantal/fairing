@@ -177,7 +177,6 @@ class AzureBackend(KubernetesBackend):
 
     def get_training_deployer(self, pod_spec_mutators = None):
         pod_spec_mutators = pod_spec_mutators or []
-        pod_spec_mutators.append(azure.add_azure_credentials_if_exists)
         return Job(namespace=self._namespace, pod_spec_mutators=pod_spec_mutators)
 
     def get_serving_deployer(self, model_class):
