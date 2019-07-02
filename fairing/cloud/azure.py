@@ -133,6 +133,7 @@ def add_azure_credentials(kube_manager, pod_spec, namespace):
     volume = client.V1Volume(
         name='azure-credentials',
         secret=client.V1SecretVolumeSource(secret_name=constants.AZURE_CREDS_SECRET_NAME))
+    
     if pod_spec.volumes:
         pod_spec.volumes.append(volume)
     else:
@@ -142,7 +143,7 @@ def add_azure_credentials(kube_manager, pod_spec, namespace):
 def add_acr_config(kube_manager, pod_spec, namespace):
     if not kube_manager.secret_exists('acr-config', namespace):
         raise ValueError("Unable to mount ACR configuration: "
-            + f"Secret {'acr-config'} not found in namespace {namespace}")
+            + f"Secret {'docker-config'} not found in namespace {namespace}")
 
     volume_mount=client.V1VolumeMount(
             name='docker-config', mount_path='/kaniko/.docker/', read_only=True)
@@ -154,7 +155,7 @@ def add_acr_config(kube_manager, pod_spec, namespace):
 
     volume=client.V1Volume(
             name='docker-config',
-            secret=client.V1SecretVolumeSource(secret_name='acr-config'))
+            config_map=client.V1ConfigMapVolumeSource(name='docker-config'))
 
     if pod_spec.volumes:
         pod_spec.volumes.append(volume)
@@ -172,8 +173,8 @@ def add_azure_files(kube_manager, pod_spec, namespace):
 
     volume=client.V1Volume(
             name='azure',
-            secret=client.V1AzureFileVolumeSource(secret_name='storage-secret', share_name='fairing-builds'))
-
+            azure_file=client.V1AzureFileVolumeSource(secret_name='storage-secret', share_name='fairing-builds'))
+                         
     if pod_spec.volumes:
         pod_spec.volumes.append(volume)
     else:
