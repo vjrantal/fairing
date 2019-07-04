@@ -161,6 +161,7 @@ class AzureBackend(KubernetesBackend):
 
     def __init__(self, namespace=None, build_context_source=None):
         build_context_source = build_context_source or azurestorage_context.StorageContextSource()
+        build_context_source.namespace = namespace
         super(AzureBackend, self).__init__(namespace, build_context_source)
 
     def get_builder(self, preprocessor, base_image, registry, needs_deps_installation=True, pod_spec_mutators=None):

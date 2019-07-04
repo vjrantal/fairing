@@ -22,8 +22,8 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 class AzureFileUploader(object):
-    def __init__(self):
-        credentials = get_azure_credentials('kubeflow')
+    def __init__(self, namespace):
+        credentials = get_azure_credentials(namespace)
         sp_credentials = ServicePrincipalCredentials(
             client_id = credentials['clientId'],
             secret = credentials['clientSecret'],
@@ -40,18 +40,20 @@ class AzureFileUploader(object):
                         tar_gz_file_to_upload):
         
         logging.info(f"Uploading contents of '{tar_gz_file_to_upload}' to 'https://{storage_account_name}.file.core.windows.net/{share_name}/{dir_name}'")
-        self.create_storage_account_if_not_exists(region, resource_group_name, storage_account_name)
-        share_service = self.get_or_create_share(region, resource_group_name, storage_account_name, share_name)
+        
+        self.create_storage_account_if_not_exists(region, resource_group_name, storage_account_name)        
+        storage_account_name, storage_key = self.get_storage_credentials(resource_group_name, storage_account_name)
+        share_service = FileService(account_name=storage_account_name, account_key=storage_key)        
+        self.create_share_if_not_exists(share_service, share_name)
         share_service.create_directory(share_name, dir_name)
         self.upload_tar_gz_contents(share_service, share_name, dir_name, tar_gz_file_to_upload)
         
-        return f"https://{storage_account_name}.file.core.windows.net/{share_name}/{dir_name}"
+        return storage_account_name, storage_key
         
     def create_storage_account_if_not_exists(self, region, resource_group_name, storage_account_name):
         # Creation should succeed even if the storage account exists, but if it exists I get error "The property 'isHnsEnabled' was specified in the input, but it cannot be updated."
         storage_accounts = self.storage_client.storage_accounts.list_by_resource_group(resource_group_name)
-        storage_account = next(filter(lambda storage_account: storage_account.name == storage_account_name, storage_accounts), None)
-        
+        storage_account = next(filter(lambda storage_account: storage_account.name == storage_account_name, storage_accounts), None)       
         if (storage_account is None):    
             storage_async_operation = self.storage_client.storage_accounts.create(
                 resource_group_name,
@@ -62,20 +64,19 @@ class AzureFileUploader(object):
                     location=region
                 )
             )
-            storage_account = storage_async_operation.result()
-            
-        return storage_account
+            storage_async_operation.result()
     
-    def get_or_create_share(self, region, resource_group_name, storage_account_name, share_name):                
+    def get_storage_credentials(self, resource_group_name, storage_account_name):
         storage_keys = self.storage_client.storage_accounts.list_keys(resource_group_name, storage_account_name)
         storage_keys = {v.key_name: v.value for v in storage_keys.keys}
-        share_service = FileService(account_name=storage_account_name, account_key=storage_keys['key1'])
+        
+        return storage_account_name, storage_keys['key1']
+    
+    def create_share_if_not_exists(self, share_service, share_name):                        
         shares = share_service.list_shares()
         share = next(filter(lambda share: share.name == share_name, shares), None)      
         if (share is None):
-            result = share_service.create_share(share_name)
-            
-        return share_service
+            share_service.create_share(share_name)
     
     def upload_tar_gz_contents(self, share_service, share_name, dir_name, tar_gz_file):
         local_dir = Path(f'{tar_gz_file}_contents')
@@ -87,10 +88,8 @@ class AzureFileUploader(object):
             cloud_relative_path = cloud_dir / path.relative_to(local_dir)
 
             if local_path.is_dir():
-                logging.info(f"Dir '{cloud_relative_path}' created")
                 share_service.create_directory(share_name, cloud_relative_path)
             else:
-                logging.info(f"File '{cloud_relative_path.parents[0]}/{cloud_relative_path.name}' created")
                 share_service.create_file_from_path(share_name, cloud_relative_path.parents[0], cloud_relative_path.name, local_path)
 
     def uncompress_tar_gz_file(self, tar_gz_file, target_dir):        
@@ -139,6 +138,23 @@ def add_azure_credentials(kube_manager, pod_spec, namespace):
     else:
         pod_spec.volumes = [volume]
 
+def create_storage_creds_secret(namespace, context_hash, storage_account_name, storage_key):
+    secret_name = constants.AZURE_STORAGE_CREDS_SECRET_NAME_PREFIX + context_hash.lower()
+    logging.info(f"Creating secret {secret_name} in namespace {namespace}")
+    secret = client.V1Secret(
+        metadata = client.V1ObjectMeta(name=secret_name),
+        string_data={
+            'azurestorageaccountname': storage_account_name,
+            'azurestorageaccountkey': storage_key
+        })
+    v1 = client.CoreV1Api()
+    v1.create_namespaced_secret(namespace, secret)
+        
+def delete_storage_creds_secret(namespace, context_hash):
+    secret_name = constants.AZURE_STORAGE_CREDS_SECRET_NAME_PREFIX + context_hash.lower()
+    logging.info(f"Deleting secret {secret_name} from namespace {namespace}")
+    v1 = client.CoreV1Api()
+    v1.delete_namespaced_secret(secret_name, namespace)
         
 def add_acr_config(kube_manager, pod_spec, namespace):
     volume_mount=client.V1VolumeMount(
@@ -159,6 +175,8 @@ def add_acr_config(kube_manager, pod_spec, namespace):
         pod_spec.volumes = [volume]
 
 def add_azure_files(kube_manager, pod_spec, namespace):
+    context_hash = pod_spec.containers[0].args[1].split(':')[-1]
+    secret_name = constants.AZURE_STORAGE_CREDS_SECRET_NAME_PREFIX + context_hash.lower()
     volume_mount=client.V1VolumeMount(
         name='azure', mount_path='/mnt/azure', read_only=True)
                          
@@ -169,7 +187,7 @@ def add_azure_files(kube_manager, pod_spec, namespace):
 
     volume=client.V1Volume(
             name='azure',
-            azure_file=client.V1AzureFileVolumeSource(secret_name='storage-credentials', share_name='fairing-builds'))
+            azure_file=client.V1AzureFileVolumeSource(secret_name=secret_name, share_name='fairing-builds'))
                          
     if pod_spec.volumes:
         pod_spec.volumes.append(volume)
