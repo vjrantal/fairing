@@ -8,12 +8,12 @@ from fairing.constants import constants
 from kubernetes import client
 
 class StorageContextSource(ContextSourceInterface):
-    def __init__(self, region=None, resource_group_name=None, storage_account_name=None, share_name=None):
+    def __init__(self, region=None, resource_group_name=None, storage_account_name=None):
         self.namespace = None
         self.region = region or "NorthEurope"
         self.resource_group_name = resource_group_name or "fairing"
         self.storage_account_name = storage_account_name or f"fairing{uuid.uuid4().hex[:17]}"
-        self.share_name = share_name or "fairing-builds"
+        self.share_name = constants.AZURE_FILES_SHARED_FOLDER
         self.context_hash = None
         self.context_path = None
 

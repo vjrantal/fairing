@@ -54,7 +54,8 @@ class AzureFileUploader(object):
         # Creation should succeed even if the storage account exists, but if it exists I get error "The property 'isHnsEnabled' was specified in the input, but it cannot be updated."
         storage_accounts = self.storage_client.storage_accounts.list_by_resource_group(resource_group_name)
         storage_account = next(filter(lambda storage_account: storage_account.name == storage_account_name, storage_accounts), None)       
-        if (storage_account is None):    
+        if (storage_account is None):
+            logging.info(f"Creating Azure Storage account '{storage_account_name}' in Resource Group '{resource_group_name}'")
             storage_async_operation = self.storage_client.storage_accounts.create(
                 resource_group_name,
                 storage_account_name,
@@ -140,7 +141,7 @@ def add_azure_credentials(kube_manager, pod_spec, namespace):
 
 def create_storage_creds_secret(namespace, context_hash, storage_account_name, storage_key):
     secret_name = constants.AZURE_STORAGE_CREDS_SECRET_NAME_PREFIX + context_hash.lower()
-    logging.info(f"Creating secret {secret_name} in namespace {namespace}")
+    logging.info(f"Creating secret '{secret_name}' in namespace '{namespace}'")
     secret = client.V1Secret(
         metadata = client.V1ObjectMeta(name=secret_name),
         string_data={
@@ -152,10 +153,11 @@ def create_storage_creds_secret(namespace, context_hash, storage_account_name, s
         
 def delete_storage_creds_secret(namespace, context_hash):
     secret_name = constants.AZURE_STORAGE_CREDS_SECRET_NAME_PREFIX + context_hash.lower()
-    logging.info(f"Deleting secret {secret_name} from namespace {namespace}")
+    logging.info(f"Deleting secret '{secret_name}' from namespace '{namespace}'")
     v1 = client.CoreV1Api()
     v1.delete_namespaced_secret(secret_name, namespace)
-        
+
+# Mount a volume with Docker config in pod so it can access Azure Container Registry
 def add_acr_config(kube_manager, pod_spec, namespace):
     volume_mount=client.V1VolumeMount(
             name='docker-config', mount_path='/kaniko/.docker/', read_only=True)
@@ -174,6 +176,7 @@ def add_acr_config(kube_manager, pod_spec, namespace):
     else:
         pod_spec.volumes = [volume]
 
+# Mount Azure Files shared folder in pod so it can access its files with a local path
 def add_azure_files(kube_manager, pod_spec, namespace):
     context_hash = pod_spec.containers[0].args[1].split(':')[-1]
     secret_name = constants.AZURE_STORAGE_CREDS_SECRET_NAME_PREFIX + context_hash.lower()
@@ -187,7 +190,7 @@ def add_azure_files(kube_manager, pod_spec, namespace):
 
     volume=client.V1Volume(
             name='azure',
-            azure_file=client.V1AzureFileVolumeSource(secret_name=secret_name, share_name='fairing-builds'))
+            azure_file=client.V1AzureFileVolumeSource(secret_name=secret_name, share_name=constants.AZURE_FILES_SHARED_FOLDER))
                          
     if pod_spec.volumes:
         pod_spec.volumes.append(volume)
