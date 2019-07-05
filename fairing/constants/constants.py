@@ -29,7 +29,7 @@ AZURE_STORAGE_CREDS_SECRET_NAME_PREFIX = 'storage-credentials-'
 
 AZURE_FILES_SHARED_FOLDER = 'fairing-builds'
 
-# This secret is required to be able to pull images from Azure Container Registry when creating new pods.
+# This secret is required to be able to pull/push images from/to Azure Container Registry.
 # To create a service principal and get its credentials we may do the following:
 #    SUBSCRIPTION_ID=...
 #    RESOURCE_GROUP=...
@@ -45,14 +45,5 @@ AZURE_FILES_SHARED_FOLDER = 'fairing-builds'
 # Then configure the serviceaccount to use this secret when pulling images from ACR:
 #    kubectl patch serviceaccount default -n ${NAMESPACE} -p "{\"imagePullSecrets\": [{\"name\": \"${SECRET_NAME}\"}]}"
 AZURE_ACR_CREDS_SECRET_NAME = 'acr-credentials'
-
-# This configMap contains the Docker config required by a pod to be able to push images to Azure Container Registry.
-# To generate this configMap we may copy the decoded contents of base64 string .dockerconfigjson in AZURE_ACR_CREDS_SECRET_NAME to a config.json file that we use here:
-#    NAMESPACE=...
-#    CONFIGMAP_NAME=...
-#    kubectl create configmap -n ${NAMESPACE} ${CONFIGMAP_NAME} --from-file=config.json
-#
-# TODO ME Credentials are directly in this configMap and not stored as a secret. This is the only way we've found to make Kaniko pod able to access ACR without modifying Kaniko itself. Kaniko documention shows e.g. how to push to Amazon ECR using a config map and an Amazon ECR credential helper with credentials stored in a secret. Amazon ECR credential helper is built in to the Kaniko executor image, so if this is not a good way to pass credentials to the pod, then we have to modify Kaniko executor image to include ACR Docker Credential Helper and use a configMap + secret combination for Azure too.
-AZURE_ACR_CONFIG_CONFIGMAP_NAME = 'acr-config'
 
 DEFAULT_USER_AGENT = 'kubeflow-fairing/{VERSION}'

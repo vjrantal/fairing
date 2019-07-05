@@ -11,7 +11,6 @@ from azure.mgmt.storage.models import StorageAccountCreateParameters
 from azure.mgmt.storage.models import Sku
 from azure.mgmt.storage.models import SkuName
 from azure.mgmt.storage.models import Kind
-from azure.storage.blob import BlockBlobService
 from azure.storage.file import FileService
 from fairing.constants import constants
 from fairing.kubernetes.manager import KubeManager
@@ -104,20 +103,20 @@ class AzureFileUploader(object):
 # Get credentials for a service principal which has permissions to create or access the storage account for Azure Files
 def get_azure_credentials(namespace):
     secret_name = constants.AZURE_CREDS_SECRET_NAME
-    if KubeManager().secret_exists(secret_name, namespace):
-        v1 = client.CoreV1Api()
-        secret = v1.read_namespaced_secret(secret_name, namespace)
-        secret_base64 = list(secret.data.values())[0]
-        secret_json = base64.b64decode(secret_base64).decode('utf-8')
-        credentials = json.loads(secret_json)
-        sp_credentials = ServicePrincipalCredentials(
-            client_id = credentials['clientId'],
-            secret = credentials['clientSecret'],
-            tenant = credentials['tenantId']) 
-        subscription_id = credentials['subscriptionId']
-        return sp_credentials, subscription_id
-    else:
+    if not KubeManager().secret_exists(secret_name, namespace):
         raise Exception(f"Secret '{secret_name}' not found in namespace '{namespace}'")
+        
+    v1 = client.CoreV1Api()
+    secret = v1.read_namespaced_secret(secret_name, namespace)
+    secret_base64 = list(secret.data.values())[0]
+    secret_json = base64.b64decode(secret_base64).decode('utf-8')
+    credentials = json.loads(secret_json)
+    sp_credentials = ServicePrincipalCredentials(
+        client_id = credentials['clientId'],
+        secret = credentials['clientSecret'],
+        tenant = credentials['tenantId']) 
+    subscription_id = credentials['subscriptionId']
+    return sp_credentials, subscription_id        
 
 # Create a secret with the credentials to access the storage account for Azure Files
 def create_storage_creds_secret(namespace, context_hash, storage_account_name, storage_key):
@@ -143,31 +142,36 @@ def delete_storage_creds_secret(namespace, context_hash):
 def is_acr_registry(registry):
     return registry.endswith(".azurecr.io")
     
-# Mount a volume with Docker config in a pod so it can access Azure Container Registry
+# Mount Docker config so the pod can access Azure Container Registry
 def add_acr_config(kube_manager, pod_spec, namespace):
+    secret_name = constants.AZURE_ACR_CREDS_SECRET_NAME
+    if not kube_manager.secret_exists(secret_name, namespace):
+        raise Exception(f"Secret '{secret_name}' not found in namespace '{namespace}'")
+        
     volume_mount=client.V1VolumeMount(
-            name='docker-config', mount_path='/kaniko/.docker/', read_only=True)
+            name='acr-config', mount_path='/kaniko/.docker/', read_only=True)
 
     if pod_spec.containers[0].volume_mounts:
         pod_spec.containers[0].volume_mounts.append(volume_mount)
     else:
         pod_spec.containers[0].volume_mounts = [volume_mount]
 
+    items = [client.V1KeyToPath(key='.dockerconfigjson', path='config.json')]
     volume=client.V1Volume(
-            name='docker-config',
-            config_map=client.V1ConfigMapVolumeSource(name=constants.AZURE_ACR_CONFIG_CONFIGMAP_NAME))
+            name='acr-config',
+            secret=client.V1SecretVolumeSource(secret_name=secret_name, items=items))
 
     if pod_spec.volumes:
         pod_spec.volumes.append(volume)
     else:
         pod_spec.volumes = [volume]
-
-# Mount Azure Files shared folder in a pod so it can access its files with a local path
+        
+# Mount Azure Files shared folder so the pod can access its files with a local path
 def add_azure_files(kube_manager, pod_spec, namespace):
     context_hash = pod_spec.containers[0].args[1].split(':')[-1]
     secret_name = constants.AZURE_STORAGE_CREDS_SECRET_NAME_PREFIX + context_hash.lower()
     volume_mount=client.V1VolumeMount(
-        name='azure', mount_path='/mnt/azure', read_only=True)
+        name='azure-files', mount_path='/mnt/azure/', read_only=True)
                          
     if pod_spec.containers[0].volume_mounts:
         pod_spec.containers[0].volume_mounts.append(volume_mount)
@@ -175,7 +179,7 @@ def add_azure_files(kube_manager, pod_spec, namespace):
         pod_spec.containers[0].volume_mounts = [volume_mount]
 
     volume=client.V1Volume(
-            name='azure',
+            name='azure-files',
             azure_file=client.V1AzureFileVolumeSource(secret_name=secret_name, share_name=constants.AZURE_FILES_SHARED_FOLDER))
                          
     if pod_spec.volumes:
