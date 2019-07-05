@@ -137,11 +137,11 @@ def delete_storage_creds_secret(namespace, context_hash):
     logging.info(f"Deleting secret '{secret_name}' from namespace '{namespace}'")
     v1 = client.CoreV1Api()
     v1.delete_namespaced_secret(secret_name, namespace)
-
-# Verify that we are working with Azure Container Registry
-def is_acr_registry(registry):
-    return registry.endswith(".azurecr.io")
     
+# Verify that we are working with an Azure Container Registry
+def is_acr_registry(registry):    
+    return registry.endswith('.azurecr.io')
+
 # Mount Docker config so the pod can access Azure Container Registry
 def add_acr_config(kube_manager, pod_spec, namespace):
     secret_name = constants.AZURE_ACR_CREDS_SECRET_NAME
@@ -170,6 +170,9 @@ def add_acr_config(kube_manager, pod_spec, namespace):
 def add_azure_files(kube_manager, pod_spec, namespace):
     context_hash = pod_spec.containers[0].args[1].split(':')[-1]
     secret_name = constants.AZURE_STORAGE_CREDS_SECRET_NAME_PREFIX + context_hash.lower()
+    if not kube_manager.secret_exists(secret_name, namespace):
+        raise Exception(f"Secret '{secret_name}' not found in namespace '{namespace}'")
+        
     volume_mount=client.V1VolumeMount(
         name='azure-files', mount_path='/mnt/azure/', read_only=True)
                          
@@ -186,9 +189,4 @@ def add_azure_files(kube_manager, pod_spec, namespace):
         pod_spec.volumes.append(volume)
     else:
         pod_spec.volumes = [volume]
-
-# TODO ME As we need configmap with ACR config to be set in the cluster already, it wouldn't make much sense to create ACR if it doesn't exist. Maybe it's better just to ensure the registry exists before continuing.
-def create_acr_registry(registry, repository, namespace):    
-    credentials, subscription_id = get_azure_credentials(namespace)
-    client = ContainerRegistryManagementClient(credentials, subscription_id)
-    # TODO ME create the registry
+        
