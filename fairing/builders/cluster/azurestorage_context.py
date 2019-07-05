@@ -33,9 +33,10 @@ class StorageContextSource(ContextSourceInterface):
             dir_name=dir_name,
             tar_gz_file_to_upload=context_filename)
         
-        # This is the secret that Kaniko pod needs to access the shared folder
+        # This is the secret that we need to mount the shared folder into the Kaniko pod
         azure.create_storage_creds_secret(self.namespace, self.context_hash, storage_account_name, storage_key)
         
+        # Local path to the files
         return f'/mnt/azure/{dir_name}/'
     
     
