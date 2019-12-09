@@ -3,6 +3,7 @@ import uuid
 import logging
 
 from kubernetes import client as k8s_client
+from kubernetes import watch
 from kubernetes.client.rest import ApiException
 
 from kubeflow.fairing.constants import constants
@@ -60,6 +61,19 @@ class Serving(Job):
         apps_v1 = k8s_client.AppsV1Api()
         self.deployment = apps_v1.create_namespaced_deployment(self.namespace, self.deployment_spec)
         self.service = v1_api.create_namespaced_service(self.namespace, self.service_spec)
+
+        w = watch.Watch()
+        for event in w.stream(k8s_client.ExtensionsV1beta1Api().list_namespaced_deployment,
+                              namespace=self.namespace,
+                              label_selector='fairing-id={}'.format(self.job_id)):
+            deployment_available = False
+            deployment = event['object']
+            for condition in deployment.status.conditions:
+                if condition.type == 'Available':
+                    if condition.status == 'True':
+                        deployment_available = True
+            if deployment_available:
+                break
 
         if self.service_type == "LoadBalancer":
             url = self.backend.get_service_external_endpoint(
